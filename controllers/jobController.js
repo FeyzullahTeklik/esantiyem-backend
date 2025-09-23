@@ -26,8 +26,8 @@ const createJob = async (req, res) => {
       });
     }
 
-    // KVKK onayı kontrolü
-    if (!kvkkConsent || !kvkkConsent.accepted) {
+    // KVKK onayı kontrolü - sadece misafir kullanıcılar için
+    if (!req.userId && (!kvkkConsent || !kvkkConsent.accepted)) {
       return res.status(400).json({ 
         success: false, 
         message: 'KVKK onayı gerekli' 
@@ -58,14 +58,23 @@ const createJob = async (req, res) => {
     // Kullanıcı giriş yapmışsa customerId ekle, yoksa guestCustomer
     if (req.userId) {
       jobData.customerId = req.userId;
+      // Kayıtlı kullanıcılar için KVKK bilgisini user'dan al
+      const user = await User.findById(req.userId);
+      if (user && user.kvkkConsent) {
+        jobData.kvkkConsent = user.kvkkConsent;
+      }
     } else {
-      if (!guestCustomer || !guestCustomer.name || !guestCustomer.email || !guestCustomer.phone) {
+      if (!guestCustomer || !guestCustomer.name || !guestCustomer.email) {
         return res.status(400).json({ 
           success: false, 
-          message: 'Misafir kullanıcı için iletişim bilgileri gerekli' 
+          message: 'Misafir kullanıcı için ad soyad ve e-posta gerekli' 
         });
       }
       jobData.guestCustomer = guestCustomer;
+      // Misafir kullanıcılar için KVKK bilgisini request'ten al
+      if (kvkkConsent) {
+        jobData.kvkkConsent = kvkkConsent;
+      }
     }
 
     const job = new Job(jobData);

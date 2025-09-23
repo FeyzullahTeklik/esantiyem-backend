@@ -17,7 +17,7 @@ const createService = async (req, res) => {
     } = req.body;
 
     // Validasyon
-    if (!title || !description || !categoryId || !subcategoryId || !pricing?.amount) {
+    if (!title || !description || !categoryId || !pricing?.amount) {
       return res.status(400).json({
         success: false,
         message: 'Başlık, açıklama, kategori ve fiyat bilgisi gerekli'
@@ -42,11 +42,23 @@ const createService = async (req, res) => {
       });
     }
 
+    // Subcategory kontrolü - eğer kategori active subcategorilere sahipse gerekli
+    const activeSubcategories = category.subcategories?.filter(sub => sub.isActive) || [];
+    if (activeSubcategories.length > 0 && (!subcategoryId || subcategoryId.trim() === '')) {
+      return res.status(400).json({
+        success: false,
+        message: 'Bu kategori için alt kategori seçimi gerekli'
+      });
+    }
+
+    // Eğer subcategory yoksa 'general' yap
+    const finalSubcategoryId = (!subcategoryId || subcategoryId.trim() === '') ? 'general' : subcategoryId;
+
     const serviceData = {
       title,
       description,
       categoryId,
-      subcategoryId,
+      subcategoryId: finalSubcategoryId,
       providerId: req.userId,
       pricing,
       serviceAreas: serviceAreas || [],

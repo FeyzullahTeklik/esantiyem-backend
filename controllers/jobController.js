@@ -277,6 +277,19 @@ const getJobs = async (req, res) => {
         }));
       }
       
+      // Arama sonuçları için hasProposals bilgisini ekle
+      const searchJobIds = jobs.map(job => job._id);
+      const searchJobsWithProposals = await Proposal.find({
+        jobId: { $in: searchJobIds }
+      }).select('jobId').distinct('jobId');
+      
+      const searchJobsWithProposalsSet = new Set(searchJobsWithProposals.map(id => id.toString()));
+      
+      jobs = jobs.map(job => ({
+        ...job,
+        hasProposals: searchJobsWithProposalsSet.has(job._id.toString())
+      }));
+      
       return res.json({
         success: true,
         jobs,
@@ -310,6 +323,19 @@ const getJobs = async (req, res) => {
         hasUserProposal: userProposalJobIds.has(job._id.toString())
       }));
     }
+
+    // Tüm job'lar için hasProposals bilgisini ekle
+    const allJobIds = jobs.map(job => job._id);
+    const jobsWithProposals = await Proposal.find({
+      jobId: { $in: allJobIds }
+    }).select('jobId').distinct('jobId');
+    
+    const jobsWithProposalsSet = new Set(jobsWithProposals.map(id => id.toString()));
+    
+    jobs = jobs.map(job => ({
+      ...job,
+      hasProposals: jobsWithProposalsSet.has(job._id.toString())
+    }));
 
     res.json({
       success: true,

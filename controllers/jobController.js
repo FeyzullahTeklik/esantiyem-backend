@@ -1,6 +1,7 @@
 const Job = require('../models/Job');
 const Category = require('../models/Category');
 const User = require('../models/User');
+const Proposal = require('../models/Proposal');
 const { deleteJobFiles } = require('./uploadController');
 
 // İlan oluşturma
@@ -256,6 +257,26 @@ const getJobs = async (req, res) => {
       const total = filteredJobs.length;
       jobs = filteredJobs.slice(skip, skip + parseInt(limit));
       
+      // Kullanıcı giriş yapmışsa hasUserProposal bilgisini ekle
+      if (req.userId) {
+        const userId = req.userId;
+        const jobIds = jobs.map(job => job._id);
+        
+        // Bu kullanıcının bu job'lara verdiği teklifleri bul
+        const userProposals = await Proposal.find({
+          providerId: userId,
+          jobId: { $in: jobIds }
+        }).select('jobId');
+        
+        const userProposalJobIds = new Set(userProposals.map(p => p.jobId.toString()));
+        
+        // Her job'a hasUserProposal bilgisini ekle
+        jobs = jobs.map(job => ({
+          ...job,
+          hasUserProposal: userProposalJobIds.has(job._id.toString())
+        }));
+      }
+      
       return res.json({
         success: true,
         jobs,
@@ -270,8 +291,25 @@ const getJobs = async (req, res) => {
     // Toplam sayı
     const total = await Job.countDocuments(filter);
 
-    // Görüntüleme sayısını artır (sadece detay sayfası için değil)
-    // jobs.forEach(job => job.incrementViews());
+    // Kullanıcı giriş yapmışsa hasUserProposal bilgisini ekle
+    if (req.userId) {
+      const userId = req.userId;
+      const jobIds = jobs.map(job => job._id);
+      
+      // Bu kullanıcının bu job'lara verdiği teklifleri bul
+      const userProposals = await Proposal.find({
+        providerId: userId,
+        jobId: { $in: jobIds }
+      }).select('jobId');
+      
+      const userProposalJobIds = new Set(userProposals.map(p => p.jobId.toString()));
+      
+      // Her job'a hasUserProposal bilgisini ekle
+      jobs = jobs.map(job => ({
+        ...job,
+        hasUserProposal: userProposalJobIds.has(job._id.toString())
+      }));
+    }
 
     res.json({
       success: true,
@@ -973,70 +1011,6 @@ const getAllJobsForAdmin = async (req, res) => {
   }
 };
 
-// İlan silme (admin ve ilan sahibi için)
-const deleteJob = async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    const job = await Job.findById(id);
-    if (!job) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'İş ilanı bulunamadı' 
-      });
-    }
-
-    // Kullanıcıyı kontrol et
-    const User = require('../models/User');
-    const user = await User.findById(req.userId);
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'Kullanıcı bulunamadı'
-      });
-    }
-
-    // Admin değilse ve ilan sahibi değilse hata ver
-    if (user.role !== 'admin' && (!job.customerId || job.customerId.toString() !== req.userId)) {
-      return res.status(403).json({
-        success: false,
-        message: 'Sadece ilan sahibi veya admin ilanı silebilir'
-      });
-    }
-
-    // Eğer iş devam ediyorsa veya tamamlanmışsa silinemez
-    if (job.status === 'accepted' || job.status === 'completed') {
-      return res.status(400).json({
-        success: false,
-        message: 'Devam eden veya tamamlanmış işler silinemez'
-      });
-    }
-
-    // Cloudinary'den iş ilanına ait tüm dosyaları sil
-    try {
-      const deleteResult = await deleteJobFiles(id);
-      console.log('Job files deletion result:', deleteResult);
-    } catch (error) {
-      console.error('Job files deletion error:', error);
-      // Dosya silme hatası olsa bile ilanı silmeye devam et
-    }
-
-    // Veritabanından iş ilanını sil
-    await Job.findByIdAndDelete(id);
-
-    res.json({
-      success: true,
-      message: 'İş ilanı ve dosyaları başarıyla silindi'
-    });
-  } catch (error) {
-    console.error('Delete job error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'İş ilanı silinirken hata oluştu' 
-    });
-  }
-};
-
 // Hizmet verenin teklifleri
 const getMyProposals = async (req, res) => {
   try {
@@ -1503,6 +1477,61 @@ const createTestJobs = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Test verileri oluşturulurken hata oluştu'
+    });
+  }
+};
+
+// İlan silme
+const deleteJob = async (req, res) => {
+  try {
+    const jobId = req.params.id;
+    const userId = req.userId;
+
+    // İlanı bul
+    const job = await Job.findById(jobId);
+    if (!job) {
+      return res.status(404).json({
+        success: false,
+        message: 'İlan bulunamadı'
+      });
+    }
+
+    // Kullanıcı kontrolü - ilan sahibi veya admin olabilir
+    const user = await User.findById(userId);
+    
+    const isOwner = job.customerId && job.customerId.toString() === userId;
+    const isAdmin = user && user.role === 'admin';
+    
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: 'Bu ilanı silme yetkiniz yok'
+      });
+    }
+
+    // İlanı sil
+    await Job.findByIdAndDelete(jobId);
+
+    // İlgili dosyaları da sil (eğer varsa)
+    if (job.attachments && (job.attachments.images.length > 0 || job.attachments.documents.length > 0)) {
+      try {
+        await deleteJobFiles(job.attachments);
+      } catch (fileError) {
+        console.error('File deletion error:', fileError);
+        // Dosya silme hatası critical değil, devam et
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'İlan başarıyla silindi'
+    });
+
+  } catch (error) {
+    console.error('Delete job error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'İlan silinirken hata oluştu'
     });
   }
 };

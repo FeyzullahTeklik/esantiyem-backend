@@ -19,6 +19,7 @@ const reviewRoutes = require('./routes/review');
 const supportRoutes = require('./routes/support');
 const passwordResetRoutes = require('./routes/passwordReset');
 const serviceRoutes = require('./routes/service');
+const proposalRoutes = require('./routes/proposal');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
@@ -29,6 +30,7 @@ app.use('/api/reviews', reviewRoutes);
 app.use('/api/support', supportRoutes);
 app.use('/api/password-reset', passwordResetRoutes);
 app.use('/api/services', serviceRoutes);
+app.use('/api/proposals', proposalRoutes);
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', env: process.env.NODE_ENV || 'development' });

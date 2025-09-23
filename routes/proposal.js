@@ -7,7 +7,6 @@ const {
   getJobProposals,
   updateProposalStatus
 } = require('../controllers/proposalController');
-
 // Teklif oluşturma (sadece provider'lar)
 router.post('/', authenticateToken, createProposal);
 

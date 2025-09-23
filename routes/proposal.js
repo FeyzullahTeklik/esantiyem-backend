@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { auth } = require('../middleware/auth');
+const { authenticateToken } = require('../middleware/auth');
 const {
   createProposal,
   getUserProposals,
@@ -9,15 +9,15 @@ const {
 } = require('../controllers/proposalController');
 
 // Teklif oluşturma (sadece provider'lar)
-router.post('/', auth, createProposal);
+router.post('/', authenticateToken, createProposal);
 
 // Kullanıcının tekliflerini listeleme (provider için)
-router.get('/my-proposals', auth, getUserProposals);
+router.get('/my-proposals', authenticateToken, getUserProposals);
 
 // İlan tekliflerini listeleme (job owner için)
-router.get('/job/:jobId', auth, getJobProposals);
+router.get('/job/:jobId', authenticateToken, getJobProposals);
 
 // Teklif durumunu güncelleme (job owner için)
-router.put('/:proposalId/status', auth, updateProposalStatus);
+router.put('/:proposalId/status', authenticateToken, updateProposalStatus);
 
 module.exports = router;

@@ -402,14 +402,10 @@ const getMyJobs = async (req, res) => {
   try {
     const Proposal = require('../models/Proposal');
     
-    console.log('DEBUG - getMyJobs called for user:', req.userId);
-    
     const jobs = await Job.find({ customerId: req.userId })
       .populate('categoryId', 'name')
       .populate('subcategoryId', 'name')
       .sort({ createdAt: -1 });
-
-    console.log('DEBUG - Found jobs:', jobs.length);
 
     // Her job için teklifleri yeni Proposal collection'dan al
     const jobsWithProposals = [];
@@ -423,7 +419,7 @@ const getMyJobs = async (req, res) => {
           .populate('providerId', 'name profileImage providerInfo.rating location email phone')
           .sort({ createdAt: -1 });
         
-        console.log(`DEBUG - Job ${job._id} has ${proposals.length} proposals`);
+        // Proposals loaded successfully
         
         // Proposals'ları eski formata dönüştür
         jobObj.proposals = proposals.map(proposal => ({
@@ -480,8 +476,7 @@ const getMyJobs = async (req, res) => {
     });
   } catch (error) {
     console.error('Get my jobs error:', error);
-    console.error('Error stack:', error.stack);
-    res.status(500).json({ success: false, message: 'İlanlar getirilemedi', error: error.message });
+    res.status(500).json({ success: false, message: 'İlanlar getirilemedi' });
   }
 };
 
@@ -1104,20 +1099,22 @@ const getMyProposals = async (req, res) => {
     // Total count
     const totalCount = await Proposal.countDocuments({ providerId: req.userId });
 
-    // Job formatında organize et
-    const jobsWithProposals = userProposals.map(proposal => {
-      const job = proposal.jobId.toObject();
-      job.proposals = [{
-        _id: proposal._id,
-        description: proposal.description,
-        price: proposal.price,
-        duration: `${proposal.duration.value} ${proposal.duration.unit}`,
-        status: proposal.status,
-        submittedAt: proposal.createdAt
-      }];
-      job.proposalCount = 1; // Bu job için sadece kullanıcının teklifi
-      return job;
-    });
+    // Job formatında organize et (jobId null olanları filtrele)
+    const jobsWithProposals = userProposals
+      .filter(proposal => proposal.jobId != null) // Job silinmiş proposals'ları filtrele
+      .map(proposal => {
+        const job = proposal.jobId.toObject();
+        job.proposals = [{
+          _id: proposal._id,
+          description: proposal.description,
+          price: proposal.price,
+          duration: `${proposal.duration.value} ${proposal.duration.unit}`,
+          status: proposal.status,
+          submittedAt: proposal.createdAt
+        }];
+        job.proposalCount = 1; // Bu job için sadece kullanıcının teklifi
+        return job;
+      });
 
     // Her job için review durumunu kontrol et  
     const Review = require('../models/Review');
@@ -1157,8 +1154,7 @@ const getMyProposals = async (req, res) => {
     });
   } catch (error) {
     console.error('Get my proposals error:', error);
-    console.error('Error stack:', error.stack);
-    res.status(500).json({ success: false, message: 'Teklifler getirilemedi', error: error.message });
+    res.status(500).json({ success: false, message: 'Teklifler getirilemedi' });
   }
 };
 

@@ -270,6 +270,12 @@ const getJobs = async (req, res) => {
         
         const userProposalJobIds = new Set(userProposals.map(p => p.jobId.toString()));
         
+        console.log('DEBUG - Search User Proposals:', {
+          userId,
+          jobIds: jobIds.map(id => id.toString()),
+          foundProposals: userProposals.map(p => p.jobId.toString())
+        });
+        
         // Her job'a hasUserProposal bilgisini ekle
         jobs = jobs.map(job => ({
           ...job,
@@ -314,6 +320,12 @@ const getJobs = async (req, res) => {
         providerId: userId,
         jobId: { $in: jobIds }
       }).select('jobId');
+      
+      console.log('DEBUG - User Proposals:', {
+        userId,
+        jobIds: jobIds.map(id => id.toString()),
+        foundProposals: userProposals.map(p => p.jobId.toString())
+      });
       
       const userProposalJobIds = new Set(userProposals.map(p => p.jobId.toString()));
       

@@ -203,27 +203,32 @@ const getCompletedJobs = async (req, res) => {
     .skip(skip)
     .limit(parseInt(limit));
 
+    console.log('DEBUG - Found customer jobs:', customerJobs.length);
+
     // Kullanıcının provider olarak tamamladığı işler (yeni Proposal collection'dan)
-    const acceptedProposals = await Proposal.find({
+    // Önce tüm accepted proposal'ları al
+    const allAcceptedProposals = await Proposal.find({
       providerId: userId,
       status: 'accepted'
+    });
+
+    console.log('DEBUG - Found accepted proposals:', allAcceptedProposals.length);
+
+    // Bu proposal'ların job ID'lerini al
+    const acceptedJobIds = allAcceptedProposals.map(p => p.jobId);
+    
+    // Completed job'ları bul
+    const providerJobs = await Job.find({
+      _id: { $in: acceptedJobIds },
+      status: 'completed'
     })
-    .populate({
-      path: 'jobId',
-      match: { status: 'completed' },
-      populate: [
-        { path: 'categoryId', select: 'name' },
-        { path: 'customerId', select: 'name profileImage' }
-      ]
-    })
-    .sort({ createdAt: -1 })
+    .populate('categoryId', 'name')
+    .populate('customerId', 'name profileImage')
+    .sort({ deliveredAt: -1 })
     .skip(skip)
     .limit(parseInt(limit));
 
-    // Null jobId'leri filtrele (completed olmayan joblar)
-    const providerJobs = acceptedProposals
-      .filter(proposal => proposal.jobId != null)
-      .map(proposal => proposal.jobId);
+    console.log('DEBUG - Found completed provider jobs:', providerJobs.length);
 
     // Customer jobs için review durumunu kontrol et
     const customerJobsWithReviews = await Promise.all(
@@ -282,6 +287,17 @@ const getCompletedJobs = async (req, res) => {
     );
 
     const total = customerJobs.length + providerJobs.length;
+
+    console.log('DEBUG - Final response:', {
+      customerJobsCount: customerJobsWithReviews.length,
+      providerJobsCount: providerJobsWithReviews.length,
+      total,
+      sampleProviderJob: providerJobsWithReviews[0] ? {
+        _id: providerJobsWithReviews[0]._id,
+        title: providerJobsWithReviews[0].title,
+        status: providerJobsWithReviews[0].status
+      } : null
+    });
 
     res.json({
       success: true,

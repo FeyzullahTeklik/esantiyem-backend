@@ -774,8 +774,7 @@ const deliverJob = async (req, res) => {
 
     // İlanı bul
     const job = await Job.findById(jobId)
-      .populate('customerId', 'name profileImage email phone location')
-      .populate('proposals.providerId', 'name profileImage email phone location providerInfo.rating');
+      .populate('customerId', 'name profileImage email phone location');
     
     if (!job) {
       return res.status(404).json({
@@ -800,7 +799,11 @@ const deliverJob = async (req, res) => {
       });
     }
 
-    const acceptedProposal = job.proposals.find(p => p._id.toString() === job.acceptedProposal.toString());
+    // Kabul edilen teklifi yeni Proposal collection'dan al
+    const Proposal = require('../models/Proposal');
+    const acceptedProposal = await Proposal.findById(job.acceptedProposal)
+      .populate('providerId', 'name profileImage email phone location providerInfo.rating');
+      
     if (!acceptedProposal || acceptedProposal.providerId._id.toString() !== req.userId) {
       return res.status(403).json({
         success: false,
@@ -909,11 +912,24 @@ const updateJobStatus = async (req, res) => {
     const isAdmin = user.role === 'admin';
     const isJobOwner = job.customerId && job.customerId.toString() === req.userId;
     
-    // Kabul edilen teklifin sahibi mi kontrol et
+    // Kabul edilen teklifin sahibi mi kontrol et (yeni Proposal collection'dan)
+    const Proposal = require('../models/Proposal');
     let isAcceptedProvider = false;
-    if (job.proposals && job.proposals.length > 0) {
-      const acceptedProposal = job.proposals.find(p => p.status === 'accepted');
-      if (acceptedProposal && acceptedProposal.providerId && acceptedProposal.providerId.toString() === req.userId) {
+    
+    if (job.acceptedProposal) {
+      // Job'da acceptedProposal ID'si varsa direkt kontrol et
+      const acceptedProposal = await Proposal.findById(job.acceptedProposal);
+      if (acceptedProposal && acceptedProposal.providerId.toString() === req.userId) {
+        isAcceptedProvider = true;
+      }
+    } else {
+      // Fallback: job'a gelen accepted proposal'ları kontrol et
+      const acceptedProposal = await Proposal.findOne({ 
+        jobId: id, 
+        status: 'accepted',
+        providerId: req.userId 
+      });
+      if (acceptedProposal) {
         isAcceptedProvider = true;
       }
     }
@@ -1094,18 +1110,11 @@ const getMyProposals = async (req, res) => {
     const { page = 1, limit = 10 } = req.query;
     const Proposal = require('../models/Proposal');
     
-    console.log('DEBUG - getMyProposals called for user:', req.userId);
-    
     // Kullanıcının tekliflerini bul (populate olmadan)
     const userProposals = await Proposal.find({ providerId: req.userId })
       .sort({ createdAt: -1 })
       .skip((Number(page) - 1) * Number(limit))
       .limit(Number(limit));
-
-    console.log('DEBUG - Found user proposals:', {
-      count: userProposals.length,
-      proposalsWithNullJob: userProposals.filter(p => !p.jobId).length
-    });
 
     // Total count
     const totalCount = await Proposal.countDocuments({ providerId: req.userId });
@@ -1116,7 +1125,6 @@ const getMyProposals = async (req, res) => {
     for (const proposal of userProposals) {
       try {
         if (!proposal.jobId) {
-          console.log('DEBUG - Skipping proposal with null jobId:', proposal._id);
           continue;
         }
         
@@ -1126,7 +1134,6 @@ const getMyProposals = async (req, res) => {
           .populate('customerId', 'name profileImage email phone location');
           
         if (!job) {
-          console.log('DEBUG - Job not found for proposal:', proposal._id, proposal.jobId);
           continue;
         }
         
@@ -1143,7 +1150,7 @@ const getMyProposals = async (req, res) => {
         
         jobsWithProposals.push(jobObj);
       } catch (proposalError) {
-        console.error('Error processing proposal:', proposal._id, proposalError);
+        // Skip problematic proposals
         continue;
       }
     }

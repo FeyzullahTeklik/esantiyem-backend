@@ -29,8 +29,9 @@ const createReview = async (req, res) => {
     if (job.customerId && job.customerId.toString() === req.userId) {
       reviewerType = 'customer';
     } else {
-      // Kabul edilen proposal'ın providerId'si mi
-      const acceptedProposal = job.proposals.find(p => p._id.toString() === job.acceptedProposal.toString());
+      // Kabul edilen proposal'ın providerId'si mi (yeni Proposal collection'dan)
+      const Proposal = require('../models/Proposal');
+      const acceptedProposal = await Proposal.findById(job.acceptedProposal);
       if (acceptedProposal && acceptedProposal.providerId.toString() === req.userId) {
         reviewerType = 'provider';
       } else {

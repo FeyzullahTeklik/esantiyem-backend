@@ -1083,28 +1083,44 @@ const getMyProposals = async (req, res) => {
     const { page = 1, limit = 10 } = req.query;
     const Proposal = require('../models/Proposal');
     
-    // Kullanıcının tekliflerini bul
+    console.log('DEBUG - getMyProposals called for user:', req.userId);
+    
+    // Kullanıcının tekliflerini bul (populate olmadan)
     const userProposals = await Proposal.find({ providerId: req.userId })
-      .populate({
-        path: 'jobId',
-        populate: [
-          { path: 'categoryId', select: 'name' },
-          { path: 'customerId', select: 'name profileImage email phone location' }
-        ]
-      })
       .sort({ createdAt: -1 })
       .skip((Number(page) - 1) * Number(limit))
       .limit(Number(limit));
 
+    console.log('DEBUG - Found user proposals:', {
+      count: userProposals.length,
+      proposalsWithNullJob: userProposals.filter(p => !p.jobId).length
+    });
+
     // Total count
     const totalCount = await Proposal.countDocuments({ providerId: req.userId });
 
-    // Job formatında organize et (jobId null olanları filtrele)
-    const jobsWithProposals = userProposals
-      .filter(proposal => proposal.jobId != null) // Job silinmiş proposals'ları filtrele
-      .map(proposal => {
-        const job = proposal.jobId.toObject();
-        job.proposals = [{
+    // Job formatında organize et
+    const jobsWithProposals = [];
+    
+    for (const proposal of userProposals) {
+      try {
+        if (!proposal.jobId) {
+          console.log('DEBUG - Skipping proposal with null jobId:', proposal._id);
+          continue;
+        }
+        
+        // Job'ı manual olarak getir
+        const job = await Job.findById(proposal.jobId)
+          .populate('categoryId', 'name')
+          .populate('customerId', 'name profileImage email phone location');
+          
+        if (!job) {
+          console.log('DEBUG - Job not found for proposal:', proposal._id, proposal.jobId);
+          continue;
+        }
+        
+        const jobObj = job.toObject();
+        jobObj.proposals = [{
           _id: proposal._id,
           description: proposal.description,
           price: proposal.price,
@@ -1112,9 +1128,14 @@ const getMyProposals = async (req, res) => {
           status: proposal.status,
           submittedAt: proposal.createdAt
         }];
-        job.proposalCount = 1; // Bu job için sadece kullanıcının teklifi
-        return job;
-      });
+        jobObj.proposalCount = 1; // Bu job için sadece kullanıcının teklifi
+        
+        jobsWithProposals.push(jobObj);
+      } catch (proposalError) {
+        console.error('Error processing proposal:', proposal._id, proposalError);
+        continue;
+      }
+    }
 
     // Her job için review durumunu kontrol et  
     const Review = require('../models/Review');

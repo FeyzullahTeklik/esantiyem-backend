@@ -189,56 +189,69 @@ const getCompletedJobs = async (req, res) => {
   try {
     const { userId } = req.params;
     const { page = 1, limit = 10 } = req.query;
+    const Proposal = require('../models/Proposal');
 
     const skip = (page - 1) * limit;
 
-    // Kullanıcının müşteri olarak tamamladığı işler ve provider olarak tamamladığı işler
+    // Kullanıcının müşteri olarak tamamladığı işler
     const customerJobs = await Job.find({ 
       customerId: userId, 
       status: 'completed' 
     })
     .populate('categoryId', 'name')
+    .sort({ deliveredAt: -1 })
+    .skip(skip)
+    .limit(parseInt(limit));
+
+    // Kullanıcının provider olarak tamamladığı işler (yeni Proposal collection'dan)
+    const acceptedProposals = await Proposal.find({
+      providerId: userId,
+      status: 'accepted'
+    })
     .populate({
-      path: 'proposals.providerId',
-      select: 'name profileImage'
+      path: 'jobId',
+      match: { status: 'completed' },
+      populate: [
+        { path: 'categoryId', select: 'name' },
+        { path: 'customerId', select: 'name profileImage' }
+      ]
     })
-    .sort({ deliveredAt: -1 })
+    .sort({ createdAt: -1 })
     .skip(skip)
     .limit(parseInt(limit));
 
-    const providerJobs = await Job.find({
-      status: 'completed',
-      'proposals.providerId': userId,
-      'proposals.status': 'accepted'
-    })
-    .populate('categoryId', 'name')
-    .populate('customerId', 'name profileImage')
-    .sort({ deliveredAt: -1 })
-    .skip(skip)
-    .limit(parseInt(limit));
+    // Null jobId'leri filtrele (completed olmayan joblar)
+    const providerJobs = acceptedProposals
+      .filter(proposal => proposal.jobId != null)
+      .map(proposal => proposal.jobId);
 
-    // Her iş için review durumunu kontrol et
+    // Customer jobs için review durumunu kontrol et
     const customerJobsWithReviews = await Promise.all(
       customerJobs.map(async (job) => {
         const jobObj = job.toObject();
-        const acceptedProposal = jobObj.proposals.find(p => p._id.toString() === jobObj.acceptedProposal.toString());
         
-        if (acceptedProposal) {
-          // Müşterinin provider'ı değerlendirip değerlendirmediğini kontrol et
-          const customerReview = await Review.findOne({
-            jobId: job._id,
-            reviewerId: userId
-          });
+        if (jobObj.acceptedProposal) {
+          // Kabul edilen proposal'ı yeni collection'dan al
+          const acceptedProposal = await Proposal.findById(jobObj.acceptedProposal)
+            .populate('providerId', 'name profileImage');
           
-          // Provider'ın müşteriyi değerlendirip değerlendirmediğini kontrol et
-          const providerReview = await Review.findOne({
-            jobId: job._id,
-            reviewerId: acceptedProposal.providerId
-          });
+          if (acceptedProposal) {
+            // Müşterinin provider'ı değerlendirip değerlendirmediğini kontrol et
+            const customerReview = await Review.findOne({
+              jobId: job._id,
+              reviewerId: userId
+            });
+            
+            // Provider'ın müşteriyi değerlendirip değerlendirmediğini kontrol et
+            const providerReview = await Review.findOne({
+              jobId: job._id,
+              reviewerId: acceptedProposal.providerId._id
+            });
 
-          jobObj.canReview = !customerReview;
-          jobObj.hasProviderReview = !!providerReview;
-          jobObj.acceptedProvider = acceptedProposal.providerId;
+            jobObj.canReview = !customerReview;
+            jobObj.hasProviderReview = !!providerReview;
+            jobObj.acceptedProvider = acceptedProposal.providerId;
+          }
         }
         
         return jobObj;

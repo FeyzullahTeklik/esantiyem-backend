@@ -499,12 +499,21 @@ const getPublicProfile = async (req, res) => {
         stats.averageRating = totalRating / customerReviews.length;
       }
     } else if (user.role === 'provider') {
-      // Hizmet veren olarak tamamladığı işler
-      stats.completedJobs = await Job.countDocuments({
-        status: 'completed',
-        'proposals.providerId': userId,
-        'proposals.status': 'accepted'
-      });
+      // Yeni Proposal collection'ını kullan
+      const Proposal = require('../models/Proposal');
+      
+      // Hizmet veren olarak kabul edilen teklifleri bul
+      const acceptedProposals = await Proposal.find({
+        providerId: userId,
+        status: 'accepted'
+      }).populate('jobId');
+      
+      // Tamamlanmış işler (kabul edilen proposal'ları olan ve completed status'lu joblar)
+      const completedJobIds = acceptedProposals
+        .filter(proposal => proposal.jobId && proposal.jobId.status === 'completed')
+        .map(proposal => proposal.jobId._id);
+        
+      stats.completedJobs = completedJobIds.length;
       
       // Hizmet veren olarak aldığı değerlendirmeler
       const providerReviews = await Review.find({ reviewedId: userId });
@@ -515,19 +524,10 @@ const getPublicProfile = async (req, res) => {
         stats.averageRating = totalRating / providerReviews.length;
       }
 
-      // Toplam kazanç (kabul edilen tekliflerin fiyatları)
-      const completedJobs = await Job.find({
-        status: 'completed',
-        'proposals.providerId': userId,
-        'proposals.status': 'accepted'
-      });
-      
-      stats.totalEarnings = completedJobs.reduce((total, job) => {
-        const acceptedProposal = job.proposals.find(p => 
-          p.providerId.toString() === userId && p.status === 'accepted'
-        );
-        return total + (acceptedProposal ? acceptedProposal.price : 0);
-      }, 0);
+      // Toplam kazanç (kabul edilen ve tamamlanmış tekliflerin fiyatları)
+      stats.totalEarnings = acceptedProposals
+        .filter(proposal => proposal.jobId && proposal.jobId.status === 'completed')
+        .reduce((total, proposal) => total + proposal.price, 0);
     }
 
     // User'a stats ekle

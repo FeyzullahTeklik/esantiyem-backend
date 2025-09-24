@@ -578,10 +578,12 @@ const submitProposal = async (req, res) => {
       });
     }
 
-    // Daha önce teklif vermiş mi kontrol et
-    const existingProposal = job.proposals.find(
-      p => p.providerId.toString() === req.userId
-    );
+    // Daha önce teklif vermiş mi kontrol et (yeni Proposal collection'dan)
+    const Proposal = require('../models/Proposal');
+    const existingProposal = await Proposal.findOne({
+      jobId: jobId,
+      providerId: req.userId
+    });
 
     if (existingProposal) {
       return res.status(400).json({
@@ -641,11 +643,11 @@ const submitProposal = async (req, res) => {
 const acceptProposal = async (req, res) => {
   try {
     const { jobId, proposalId } = req.params;
+    const Proposal = require('../models/Proposal');
 
     // İlanı bul
     const job = await Job.findById(jobId)
-      .populate('customerId', 'name profileImage email phone location')
-      .populate('proposals.providerId', 'name profileImage email phone location providerInfo.rating');
+      .populate('customerId', 'name profileImage email phone location');
     
     if (!job) {
       return res.status(404).json({
@@ -663,8 +665,10 @@ const acceptProposal = async (req, res) => {
     }
 
     // Kabul edilecek teklifi bul
-    const proposalToAccept = job.proposals.find(p => p._id.toString() === proposalId);
-    if (!proposalToAccept) {
+    const proposalToAccept = await Proposal.findById(proposalId)
+      .populate('providerId', 'name profileImage email phone location providerInfo.rating');
+      
+    if (!proposalToAccept || proposalToAccept.jobId.toString() !== jobId) {
       return res.status(404).json({
         success: false,
         message: 'Teklif bulunamadı'
@@ -679,23 +683,30 @@ const acceptProposal = async (req, res) => {
       });
     }
 
-    // Teklifi kabul et ve diğerlerini reddet
-    job.proposals.forEach(proposal => {
-      if (proposal._id.toString() === proposalId) {
-        proposal.status = 'accepted';
-        proposal.respondedAt = new Date();
-      } else if (proposal.status === 'pending') {
-        proposal.status = 'rejected';
-        proposal.respondedAt = new Date();
+    // Teklifi kabul et
+    proposalToAccept.status = 'accepted';
+    proposalToAccept.acceptedAt = new Date();
+    await proposalToAccept.save();
+
+    // Bu job'a gelen diğer pending teklifleri reddet
+    await Proposal.updateMany(
+      { 
+        jobId: jobId, 
+        _id: { $ne: proposalId },
+        status: 'pending' 
+      },
+      { 
+        status: 'rejected',
+        rejectedAt: new Date()
       }
-    });
+    );
 
     // İş ilanı durumunu "accepted" yap ve kabul edilen teklif bilgilerini kaydet
     job.status = 'accepted';
     job.acceptedProposal = proposalToAccept._id;
     job.acceptedAt = new Date();
     job.acceptedPrice = proposalToAccept.price;
-    job.acceptedDuration = proposalToAccept.duration;
+    job.acceptedDuration = `${proposalToAccept.duration.value} ${proposalToAccept.duration.unit}`;
 
     await job.save();
 

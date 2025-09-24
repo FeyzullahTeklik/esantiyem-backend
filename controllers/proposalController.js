@@ -5,6 +5,12 @@ const User = require('../models/User');
 // Teklif oluşturma
 const createProposal = async (req, res) => {
   try {
+    console.log('DEBUG - createProposal called:', {
+      body: req.body,
+      providerId: req.userId,
+      headers: req.headers.authorization ? 'Present' : 'Missing'
+    });
+    
     const { jobId, description, price, duration } = req.body;
     const providerId = req.userId;
 
@@ -71,11 +77,17 @@ const createProposal = async (req, res) => {
     });
 
     await proposal.save();
+    console.log('DEBUG - Proposal saved successfully:', proposal._id);
 
     // Populate ederek döndür
     const populatedProposal = await Proposal.findById(proposal._id)
       .populate('providerId', 'name profileImage location phone email')
       .populate('jobId', 'title');
+
+    console.log('DEBUG - Proposal response sent:', {
+      proposalId: populatedProposal._id,
+      jobId: populatedProposal.jobId._id
+    });
 
     res.status(201).json({
       success: true,

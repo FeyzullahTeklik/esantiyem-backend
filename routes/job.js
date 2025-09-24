@@ -20,8 +20,8 @@ const {
 const router = express.Router();
 
 // Public routes (üye olmadan erişilebilir)
-// İlanları listeleme (genel)
-router.get('/', getJobs);
+// İlanları listeleme (genel) - optional auth for hasUserProposal
+router.get('/', optionalAuth, getJobs);
 
 // İlan detayı
 router.get('/:id', getJobById);

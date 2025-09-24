@@ -98,6 +98,7 @@ const createJob = async (req, res) => {
 // İlanları listeleme (genel)
 const getJobs = async (req, res) => {
   try {
+    console.log('DEBUG - getJobs called with userId:', req.userId);
     const {
       page = 1,
       limit = 10,
@@ -321,9 +322,10 @@ const getJobs = async (req, res) => {
         jobId: { $in: jobIds }
       }).select('jobId');
       
-      console.log('DEBUG - User Proposals:', {
+      console.log('DEBUG - Main getJobs User Proposals:', {
         userId,
-        jobIds: jobIds.map(id => id.toString()),
+        totalJobs: jobIds.length,
+        foundProposalsCount: userProposals.length,
         foundProposals: userProposals.map(p => p.jobId.toString())
       });
       

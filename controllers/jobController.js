@@ -98,7 +98,7 @@ const createJob = async (req, res) => {
 // İlanları listeleme (genel)
 const getJobs = async (req, res) => {
   try {
-    // console.log('DEBUG - getJobs called with userId:', req.userId);
+    console.log('DEBUG - getJobs called with userId:', req.userId);
     const {
       page = 1,
       limit = 10,

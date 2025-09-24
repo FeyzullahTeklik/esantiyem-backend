@@ -5,11 +5,6 @@ const User = require('../models/User');
 // Teklif oluşturma
 const createProposal = async (req, res) => {
   try {
-    console.log('DEBUG - createProposal called:', {
-      body: req.body,
-      providerId: req.userId,
-      headers: req.headers.authorization ? 'Present' : 'Missing'
-    });
     
     const { jobId, description, price, duration } = req.body;
     const providerId = req.userId;
@@ -76,18 +71,27 @@ const createProposal = async (req, res) => {
       }
     });
 
-    await proposal.save();
-    console.log('DEBUG - Proposal saved successfully:', proposal._id);
+    const savedProposal = await proposal.save();
+
+    // Job'ın proposal count'unu güncelle
+    const proposalCount = await Proposal.countDocuments({ jobId });
+    console.log('DEBUG - Updating job proposal count:', { jobId, proposalCount });
+    
+    const updatedJob = await Job.findByIdAndUpdate(
+      jobId, 
+      { 'stats.proposalCount': proposalCount },
+      { new: true }
+    );
+    
+    console.log('DEBUG - Job updated successfully:', {
+      jobId: updatedJob._id,
+      newProposalCount: updatedJob.stats.proposalCount
+    });
 
     // Populate ederek döndür
-    const populatedProposal = await Proposal.findById(proposal._id)
+    const populatedProposal = await Proposal.findById(savedProposal._id)
       .populate('providerId', 'name profileImage location phone email')
       .populate('jobId', 'title');
-
-    console.log('DEBUG - Proposal response sent:', {
-      proposalId: populatedProposal._id,
-      jobId: populatedProposal.jobId._id
-    });
 
     res.status(201).json({
       success: true,

@@ -75,18 +75,7 @@ const createProposal = async (req, res) => {
 
     // Job'ın proposal count'unu güncelle
     const proposalCount = await Proposal.countDocuments({ jobId });
-    console.log('DEBUG - Updating job proposal count:', { jobId, proposalCount });
-    
-    const updatedJob = await Job.findByIdAndUpdate(
-      jobId, 
-      { 'stats.proposalCount': proposalCount },
-      { new: true }
-    );
-    
-    console.log('DEBUG - Job updated successfully:', {
-      jobId: updatedJob._id,
-      newProposalCount: updatedJob.stats.proposalCount
-    });
+    await Job.findByIdAndUpdate(jobId, { 'stats.proposalCount': proposalCount });
 
     // Populate ederek döndür
     const populatedProposal = await Proposal.findById(savedProposal._id)

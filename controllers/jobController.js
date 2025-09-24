@@ -402,20 +402,28 @@ const getMyJobs = async (req, res) => {
   try {
     const Proposal = require('../models/Proposal');
     
+    console.log('DEBUG - getMyJobs called for user:', req.userId);
+    
     const jobs = await Job.find({ customerId: req.userId })
       .populate('categoryId', 'name')
       .populate('subcategoryId', 'name')
       .sort({ createdAt: -1 });
 
+    console.log('DEBUG - Found jobs:', jobs.length);
+
     // Her job için teklifleri yeni Proposal collection'dan al
-    const jobsWithProposals = await Promise.all(
-      jobs.map(async (job) => {
+    const jobsWithProposals = [];
+    
+    for (const job of jobs) {
+      try {
         const jobObj = job.toObject();
         
         // Bu job'a gelen teklifleri al
         const proposals = await Proposal.find({ jobId: job._id })
           .populate('providerId', 'name profileImage providerInfo.rating location email phone')
           .sort({ createdAt: -1 });
+        
+        console.log(`DEBUG - Job ${job._id} has ${proposals.length} proposals`);
         
         // Proposals'ları eski formata dönüştür
         jobObj.proposals = proposals.map(proposal => ({
@@ -428,15 +436,21 @@ const getMyJobs = async (req, res) => {
           providerId: proposal.providerId
         }));
         
-        return jobObj;
-      })
-    );
+        jobsWithProposals.push(jobObj);
+      } catch (jobError) {
+        console.error(`Error processing job ${job._id}:`, jobError);
+        // Job'ı proposals olmadan ekle
+        const jobObj = job.toObject();
+        jobObj.proposals = [];
+        jobsWithProposals.push(jobObj);
+      }
+    }
 
     // Her job için review durumunu kontrol et
     const Review = require('../models/Review');
     const jobsWithReviewStatus = await Promise.all(
       jobsWithProposals.map(async (job) => {
-        const jobObj = job.toObject();
+        const jobObj = job; // job zaten bir object
         
         if (jobObj.status === 'completed') {
           // Müşterinin bu iş için review yapıp yapmadığını kontrol et
@@ -466,7 +480,8 @@ const getMyJobs = async (req, res) => {
     });
   } catch (error) {
     console.error('Get my jobs error:', error);
-    res.status(500).json({ success: false, message: 'İlanlar getirilemedi' });
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ success: false, message: 'İlanlar getirilemedi', error: error.message });
   }
 };
 
@@ -1142,7 +1157,8 @@ const getMyProposals = async (req, res) => {
     });
   } catch (error) {
     console.error('Get my proposals error:', error);
-    res.status(500).json({ success: false, message: 'Teklifler getirilemedi' });
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ success: false, message: 'Teklifler getirilemedi', error: error.message });
   }
 };
 

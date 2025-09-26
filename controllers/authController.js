@@ -146,6 +146,7 @@ const register = async (req, res) => {
 
     // Provider bilgilerini ekle
     if (role === 'provider' && providerInfo) {
+      console.log('Register Debug - ProviderInfo received:', JSON.stringify(providerInfo, null, 2));
       userData.providerInfo = {
         services: providerInfo.services || [],
         experience: providerInfo.experience || 0,
@@ -158,6 +159,7 @@ const register = async (req, res) => {
         },
         portfolio: []
       };
+      console.log('Register Debug - Services being saved:', JSON.stringify(userData.providerInfo.services, null, 2));
     }
 
     // Kullanıcı oluştur
@@ -261,6 +263,11 @@ const getProfile = async (req, res) => {
         success: false,
         message: 'Kullanıcı bulunamadı'
       });
+    }
+
+    console.log('GetProfile Debug - User role:', user.role);
+    if (user.role === 'provider' && user.providerInfo) {
+      console.log('GetProfile Debug - ProviderInfo services:', JSON.stringify(user.providerInfo.services, null, 2));
     }
 
     res.json({

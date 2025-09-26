@@ -203,16 +203,12 @@ const getCompletedJobs = async (req, res) => {
     .skip(skip)
     .limit(parseInt(limit));
 
-    console.log('DEBUG - Found customer jobs:', customerJobs.length);
-
     // Kullanıcının provider olarak tamamladığı işler (yeni Proposal collection'dan)
     // Önce tüm accepted proposal'ları al
     const allAcceptedProposals = await Proposal.find({
       providerId: userId,
       status: 'accepted'
     });
-
-    console.log('DEBUG - Found accepted proposals:', allAcceptedProposals.length);
 
     // Bu proposal'ların job ID'lerini al
     const acceptedJobIds = allAcceptedProposals.map(p => p.jobId);
@@ -227,8 +223,6 @@ const getCompletedJobs = async (req, res) => {
     .sort({ deliveredAt: -1 })
     .skip(skip)
     .limit(parseInt(limit));
-
-    console.log('DEBUG - Found completed provider jobs:', providerJobs.length);
 
     // Customer jobs için review durumunu kontrol et
     const customerJobsWithReviews = await Promise.all(
@@ -287,17 +281,6 @@ const getCompletedJobs = async (req, res) => {
     );
 
     const total = customerJobs.length + providerJobs.length;
-
-    console.log('DEBUG - Final response:', {
-      customerJobsCount: customerJobsWithReviews.length,
-      providerJobsCount: providerJobsWithReviews.length,
-      total,
-      sampleProviderJob: providerJobsWithReviews[0] ? {
-        _id: providerJobsWithReviews[0]._id,
-        title: providerJobsWithReviews[0].title,
-        status: providerJobsWithReviews[0].status
-      } : null
-    });
 
     res.json({
       success: true,

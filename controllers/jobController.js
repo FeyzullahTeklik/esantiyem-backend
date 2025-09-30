@@ -52,7 +52,7 @@ const createJob = async (req, res) => {
       location,
       attachments: attachments || { images: [], documents: [] },
       duration,
-      status: 'pending', // İlanlar onay için bekleyecek
+      status: 'approved', // İlanlar otomatik onaylanır
       kvkkConsent
     };
 

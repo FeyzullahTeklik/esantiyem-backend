@@ -62,7 +62,7 @@ const createService = async (req, res) => {
       providerId: req.userId,
       pricing,
       serviceAreas: serviceAreas || [],
-      status: 'pending' // Admin onayı bekliyor
+      status: 'approved' // Hizmetler otomatik onaylanır
     };
 
     // CoverImage varsa ekle
@@ -292,8 +292,8 @@ const updateService = async (req, res) => {
       }
     });
 
-    // Güncelleme sonrası tekrar onay gerekir
-    updateData.status = 'pending';
+    // Güncelleme sonrası da otomatik onaylı kalır
+    // updateData.status = 'pending'; // Artık tekrar onay gerekmiyor
 
     const updatedService = await Service.findByIdAndUpdate(
       id,

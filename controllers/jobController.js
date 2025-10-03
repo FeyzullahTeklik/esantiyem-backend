@@ -958,10 +958,11 @@ const updateJobStatus = async (req, res) => {
     });
   }
 };
-
 // Admin için tüm ilanları listeleme
 const getAllJobsForAdmin = async (req, res) => {
   try {
+    const Proposal = require('../models/Proposal');
+    
     const {
       page = 1,
       limit = 10,
@@ -1001,10 +1002,6 @@ const getAllJobsForAdmin = async (req, res) => {
         .populate('categoryId', 'name icon')
         .populate('subcategoryId', 'name')
         .populate('customerId', 'name email profileImage location phone')
-        .populate({
-          path: 'proposals.providerId',
-          select: 'name email profileImage location providerInfo.rating'
-        })
         .lean();
 
       // JavaScript ile filtreleme (kategori adı ve müşteri adı dahil)
@@ -1039,29 +1036,40 @@ const getAllJobsForAdmin = async (req, res) => {
       jobs = filteredJobs.slice(skip, skip + parseInt(limit));
     } else {
       // Normal filtreleme (arama yok)
-    // Sayfalama
-    const skip = (page - 1) * limit;
+      // Sayfalama
+      const skip = (page - 1) * limit;
 
       // İlanları getir
       jobs = await Job.find(filter)
-      .populate('categoryId', 'name icon')
-      .populate('subcategoryId', 'name')
-      .populate('customerId', 'name email profileImage location phone')
-      .populate({
-        path: 'proposals.providerId',
-        select: 'name email profileImage location providerInfo.rating'
-      })
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(parseInt(limit))
-      .lean();
+        .populate('categoryId', 'name icon')
+        .populate('subcategoryId', 'name')
+        .populate('customerId', 'name email profileImage location phone')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parseInt(limit))
+        .lean();
 
       // Toplam sayı
       total = await Job.countDocuments(filter);
     }
 
+    // Her job için teklifleri Proposal collection'dan al
+    const jobIds = jobs.map(job => job._id);
+    const proposals = await Proposal.find({ jobId: { $in: jobIds } })
+      .populate('providerId', 'name email profileImage location providerInfo.rating')
+      .lean();
+
+    // Proposals'ları job'lara ekle
+    const jobsWithProposals = jobs.map(job => {
+      const jobProposals = proposals.filter(p => p.jobId.toString() === job._id.toString());
+      return {
+        ...job,
+        proposals: jobProposals
+      };
+    });
+
     // Kabul edilen teklif sahibi bilgilerini ekle
-    const jobsWithAcceptedProviders = jobs.map(job => {
+    const jobsWithAcceptedProviders = jobsWithProposals.map(job => {
       if (job.status === 'closed' && job.acceptedProposal) {
         const acceptedProposal = job.proposals?.find(p => p._id.toString() === job.acceptedProposal.toString());
         if (acceptedProposal && acceptedProposal.providerId) {
@@ -1071,17 +1079,14 @@ const getAllJobsForAdmin = async (req, res) => {
       return job;
     });
 
-    // İstatistikleri hesapla
+    // İstatistikleri hesapla - Proposal collection'dan
     const stats = {
       pending: await Job.countDocuments({ status: 'pending' }),
       approved: await Job.countDocuments({ status: 'approved' }),
       accepted: await Job.countDocuments({ status: 'accepted' }),
       completed: await Job.countDocuments({ status: 'completed' }),
       rejected: await Job.countDocuments({ status: 'rejected' }),
-      totalProposals: await Job.aggregate([
-        { $unwind: '$proposals' },
-        { $count: 'total' }
-      ]).then(result => result[0]?.total || 0)
+      totalProposals: await Proposal.countDocuments()
     };
 
     res.json({

@@ -8,7 +8,8 @@ const {
   updateUser,
   createUser,
   deleteUser,
-  getSystemStats
+  getSystemStats,
+  cleanupOrphanRecords
 } = require('../controllers/adminController');
 const { deleteReview: deleteReviewController } = require('../controllers/reviewController');
 
@@ -27,6 +28,9 @@ const requireAdmin = (req, res, next) => {
 
 // Sistem istatistikleri
 router.get('/stats', authenticateToken, requireAdmin, getSystemStats);
+
+// Sistem temizliği
+router.post('/cleanup/orphans', authenticateToken, requireAdmin, cleanupOrphanRecords); // Orphan kayıtları temizle
 
 // Kullanıcı CRUD işlemleri
 router.get('/users', authenticateToken, requireAdmin, getAllUsers); // Tüm kullanıcıları listele

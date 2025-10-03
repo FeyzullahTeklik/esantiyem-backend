@@ -311,8 +311,13 @@ const deleteUser = async (req, res) => {
 
     // Kullanıcının iş ilanlarını bul ve sil
     try {
+      const Proposal = require('../models/Proposal');
+      const Review = require('../models/Review');
+      
       const userJobs = await Job.find({ customerId: userId });
       console.log(`Found ${userJobs.length} jobs for user ${userId}`);
+      
+      const jobIds = userJobs.map(job => job._id);
       
       // Her iş ilanının dosyalarını sil
       for (const job of userJobs) {
@@ -323,6 +328,29 @@ const deleteUser = async (req, res) => {
           console.error(`Error deleting files for job ${job._id}:`, error);
         }
       }
+      
+      // İş ilanlarına ait tüm teklifleri sil
+      if (jobIds.length > 0) {
+        const deletedProposals = await Proposal.deleteMany({ jobId: { $in: jobIds } });
+        console.log(`Deleted ${deletedProposals.deletedCount} proposals for user jobs`);
+        
+        // İş ilanlarına ait tüm yorumları sil
+        const deletedReviews = await Review.deleteMany({ jobId: { $in: jobIds } });
+        console.log(`Deleted ${deletedReviews.deletedCount} reviews for user jobs`);
+      }
+      
+      // Kullanıcının provider olarak verdiği tüm teklifleri sil
+      const deletedUserProposals = await Proposal.deleteMany({ providerId: userId });
+      console.log(`Deleted ${deletedUserProposals.deletedCount} proposals by user as provider`);
+      
+      // Kullanıcının verdiği/aldığı tüm yorumları sil
+      const deletedUserReviews = await Review.deleteMany({ 
+        $or: [
+          { customerId: userId },
+          { providerId: userId }
+        ]
+      });
+      console.log(`Deleted ${deletedUserReviews.deletedCount} reviews by/for user`);
       
       // İş ilanlarını veritabanından sil
       await Job.deleteMany({ customerId: userId });
@@ -434,6 +462,148 @@ const getSystemStats = async (req, res) => {
   }
 };
 
+// Orphan (sahipsiz) kayıtları temizle
+const cleanupOrphanRecords = async (req, res) => {
+  try {
+    const Proposal = require('../models/Proposal');
+    const Review = require('../models/Review');
+    const Service = require('../models/Service');
+
+    const report = {
+      proposals: { checked: 0, deleted: 0, orphans: [] },
+      reviews: { checked: 0, deleted: 0, orphans: [] },
+      summary: ''
+    };
+
+    // 1. Orphan Proposals (jobId artık mevcut değil)
+    console.log('🔍 Checking for orphan proposals...');
+    const allProposals = await Proposal.find({}).lean();
+    report.proposals.checked = allProposals.length;
+
+    for (const proposal of allProposals) {
+      // Job kontrolü
+      const jobExists = await Job.findById(proposal.jobId);
+      if (!jobExists) {
+        report.proposals.orphans.push({
+          proposalId: proposal._id,
+          jobId: proposal.jobId,
+          providerId: proposal.providerId
+        });
+      }
+
+      // Provider kontrolü
+      const providerExists = await User.findById(proposal.providerId);
+      if (!providerExists) {
+        if (!report.proposals.orphans.find(o => o.proposalId.toString() === proposal._id.toString())) {
+          report.proposals.orphans.push({
+            proposalId: proposal._id,
+            jobId: proposal.jobId,
+            providerId: proposal.providerId,
+            reason: 'Provider deleted'
+          });
+        }
+      }
+    }
+
+    // Orphan proposals'ları sil
+    if (report.proposals.orphans.length > 0) {
+      const orphanProposalIds = report.proposals.orphans.map(o => o.proposalId);
+      const deleteResult = await Proposal.deleteMany({ _id: { $in: orphanProposalIds } });
+      report.proposals.deleted = deleteResult.deletedCount;
+      console.log(`✅ Deleted ${deleteResult.deletedCount} orphan proposals`);
+    }
+
+    // 2. Orphan Reviews (jobId veya serviceId artık mevcut değil)
+    console.log('🔍 Checking for orphan reviews...');
+    const allReviews = await Review.find({}).lean();
+    report.reviews.checked = allReviews.length;
+
+    for (const review of allReviews) {
+      let isOrphan = false;
+      let reason = '';
+
+      // Job review kontrolü
+      if (review.jobId) {
+        const jobExists = await Job.findById(review.jobId);
+        if (!jobExists) {
+          isOrphan = true;
+          reason = 'Job deleted';
+        }
+      }
+
+      // Service review kontrolü
+      if (review.serviceId) {
+        const serviceExists = await Service.findById(review.serviceId);
+        if (!serviceExists) {
+          isOrphan = true;
+          reason = 'Service deleted';
+        }
+      }
+
+      // Customer kontrolü
+      if (review.customerId) {
+        const customerExists = await User.findById(review.customerId);
+        if (!customerExists) {
+          isOrphan = true;
+          reason = 'Customer deleted';
+        }
+      }
+
+      // Provider kontrolü
+      if (review.providerId) {
+        const providerExists = await User.findById(review.providerId);
+        if (!providerExists) {
+          isOrphan = true;
+          reason = 'Provider deleted';
+        }
+      }
+
+      if (isOrphan) {
+        report.reviews.orphans.push({
+          reviewId: review._id,
+          jobId: review.jobId,
+          serviceId: review.serviceId,
+          reason
+        });
+      }
+    }
+
+    // Orphan reviews'ları sil
+    if (report.reviews.orphans.length > 0) {
+      const orphanReviewIds = report.reviews.orphans.map(o => o.reviewId);
+      const deleteResult = await Review.deleteMany({ _id: { $in: orphanReviewIds } });
+      report.reviews.deleted = deleteResult.deletedCount;
+      console.log(`✅ Deleted ${deleteResult.deletedCount} orphan reviews`);
+    }
+
+    // Özet rapor
+    report.summary = `
+      Temizlik Raporu:
+      - Kontrol Edilen Teklifler: ${report.proposals.checked}
+      - Silinen Orphan Teklifler: ${report.proposals.deleted}
+      - Kontrol Edilen Yorumlar: ${report.reviews.checked}
+      - Silinen Orphan Yorumlar: ${report.reviews.deleted}
+      - Toplam Temizlenen Kayıt: ${report.proposals.deleted + report.reviews.deleted}
+    `;
+
+    console.log(report.summary);
+
+    res.json({
+      success: true,
+      message: 'Orphan kayıtlar başarıyla temizlendi',
+      report
+    });
+
+  } catch (error) {
+    console.error('Cleanup orphan records error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Temizlik işlemi sırasında hata oluştu',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   getAllUsers,
   toggleUserStatus,
@@ -442,5 +612,6 @@ module.exports = {
   updateUser,
   createUser,
   deleteUser,
-  getSystemStats
+  getSystemStats,
+  cleanupOrphanRecords
 }; 

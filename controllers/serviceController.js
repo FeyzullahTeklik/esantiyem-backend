@@ -319,6 +319,7 @@ const updateService = async (req, res) => {
 // Hizmet silme
 const deleteService = async (req, res) => {
   try {
+    const Review = require('../models/Review');
     const { id } = req.params;
 
     const service = await Service.findById(id);
@@ -336,6 +337,14 @@ const deleteService = async (req, res) => {
       });
     }
 
+    // Hizmete ait tüm yorumları sil
+    try {
+      const deletedReviews = await Review.deleteMany({ serviceId: id });
+      console.log(`Deleted ${deletedReviews.deletedCount} reviews for service ${id}`);
+    } catch (reviewError) {
+      console.error('Error deleting reviews:', reviewError);
+    }
+
     // Kapak görselini sil
     if (service.coverImage) {
       try {
@@ -349,7 +358,7 @@ const deleteService = async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Hizmet silindi'
+      message: 'Hizmet ve yorumlar silindi'
     });
 
   } catch (error) {

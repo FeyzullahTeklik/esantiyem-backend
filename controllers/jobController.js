@@ -1600,6 +1600,9 @@ const createTestJobs = async (req, res) => {
 // İlan silme
 const deleteJob = async (req, res) => {
   try {
+    const Proposal = require('../models/Proposal');
+    const Review = require('../models/Review');
+    
     const jobId = req.params.id;
     const userId = req.userId;
 
@@ -1625,6 +1628,22 @@ const deleteJob = async (req, res) => {
       });
     }
 
+    // İlana ait tüm teklifleri sil
+    try {
+      const deletedProposals = await Proposal.deleteMany({ jobId: jobId });
+      console.log(`Deleted ${deletedProposals.deletedCount} proposals for job ${jobId}`);
+    } catch (proposalError) {
+      console.error('Error deleting proposals:', proposalError);
+    }
+
+    // İlana ait tüm yorumları sil
+    try {
+      const deletedReviews = await Review.deleteMany({ jobId: jobId });
+      console.log(`Deleted ${deletedReviews.deletedCount} reviews for job ${jobId}`);
+    } catch (reviewError) {
+      console.error('Error deleting reviews:', reviewError);
+    }
+
     // İlanı sil
     await Job.findByIdAndDelete(jobId);
 
@@ -1640,7 +1659,7 @@ const deleteJob = async (req, res) => {
 
     res.json({
       success: true,
-      message: 'İlan başarıyla silindi'
+      message: 'İlan, teklifler ve yorumlar başarıyla silindi'
     });
 
   } catch (error) {

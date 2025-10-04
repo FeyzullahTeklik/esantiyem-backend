@@ -81,6 +81,13 @@ const sendPasswordResetEmail = async (email, otp) => {
 
 // Teklif bildirimi emaili gönder
 const sendProposalNotification = async (customerEmail, jobTitle, providerName, proposalAmount) => {
+  console.log('📧 sendProposalNotification called with:', {
+    customerEmail,
+    jobTitle,
+    providerName,
+    proposalAmount
+  });
+
   const transporter = createTransporter();
   
   const mailOptions = {
@@ -125,10 +132,20 @@ const sendProposalNotification = async (customerEmail, jobTitle, providerName, p
   };
 
   try {
-    await transporter.sendMail(mailOptions);
-    return { success: true };
+    console.log('📤 Attempting to send email via SMTP...');
+    const info = await transporter.sendMail(mailOptions);
+    console.log('✅ Email sent successfully!');
+    console.log('📧 Message ID:', info.messageId);
+    console.log('📋 Response:', info.response);
+    return { success: true, messageId: info.messageId };
   } catch (error) {
-    console.error('Email gönderme hatası:', error);
+    console.error('❌ Email sending failed:', error);
+    console.error('Error details:', {
+      code: error.code,
+      command: error.command,
+      response: error.response,
+      responseCode: error.responseCode
+    });
     return { success: false, error: error.message };
   }
 };

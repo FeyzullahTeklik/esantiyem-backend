@@ -17,8 +17,9 @@ const createProposal = async (req, res) => {
       });
     }
 
-    // Job'ın varlığını ve aktif olduğunu kontrol et
-    const job = await Job.findById(jobId);
+    // Job'ın varlığını ve aktif olduğunu kontrol et - müşteri bilgileriyle birlikte
+    const job = await Job.findById(jobId)
+      .populate('customerId', 'name email');
     if (!job) {
       return res.status(404).json({
         success: false,
@@ -81,6 +82,29 @@ const createProposal = async (req, res) => {
     const populatedProposal = await Proposal.findById(savedProposal._id)
       .populate('providerId', 'name profileImage location phone email')
       .populate('jobId', 'title');
+
+    // Email bildirimi gönder
+    try {
+      const { sendProposalNotification } = require('../utils/emailService');
+      
+      // Müşteriye email gönder (hem üye hem misafir müşteriler için)
+      const customerEmail = job.customerId ? job.customerId.email : job.guestCustomer?.email;
+      if (customerEmail) {
+        console.log(`Sending proposal notification to ${customerEmail} for job "${job.title}"`);
+        await sendProposalNotification(
+          customerEmail,
+          job.title,
+          user.name,
+          parseFloat(price)
+        );
+        console.log(`✅ Email sent successfully to ${customerEmail}`);
+      } else {
+        console.log('⚠️ No customer email found, skipping notification');
+      }
+    } catch (emailError) {
+      console.error('❌ Email notification error:', emailError);
+      // Email hatası işlemi durdurmaz
+    }
 
     res.status(201).json({
       success: true,

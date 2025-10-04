@@ -612,15 +612,19 @@ const submitProposal = async (req, res) => {
       // Müşteriye email gönder (hem üye hem misafir müşteriler için)
       const customerEmail = job.customerId ? job.customerId.email : job.guestCustomer?.email;
       if (customerEmail) {
+        console.log(`Sending proposal notification to ${customerEmail} for job "${job.title}"`);
         await sendProposalNotification(
           customerEmail,
           job.title,
           req.user.name,
           parseFloat(price)
         );
+        console.log(`✅ Email sent successfully to ${customerEmail}`);
+      } else {
+        console.log('⚠️ No customer email found, skipping notification');
       }
     } catch (emailError) {
-      console.error('Email bildirimi gönderilirken hata:', emailError);
+      console.error('❌ Email notification error:', emailError);
       // Email hatası işi durdurmaz
     }
 

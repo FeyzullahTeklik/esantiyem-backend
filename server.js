@@ -20,6 +20,7 @@ const supportRoutes = require('./routes/support');
 const passwordResetRoutes = require('./routes/passwordReset');
 const serviceRoutes = require('./routes/service');
 const proposalRoutes = require('./routes/proposal');
+const blogRoutes = require('./routes/blog');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
@@ -31,6 +32,7 @@ app.use('/api/support', supportRoutes);
 app.use('/api/password-reset', passwordResetRoutes);
 app.use('/api/services', serviceRoutes);
 app.use('/api/proposals', proposalRoutes);
+app.use('/api/blogs', blogRoutes);
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', env: process.env.NODE_ENV || 'development' });

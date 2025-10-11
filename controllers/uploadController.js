@@ -411,6 +411,70 @@ const deleteJobFiles = async (jobId) => {
   }
 };
 
+// Blog cover image yükleme
+const uploadBlogCover = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'Dosya seçilmedi'
+      });
+    }
+
+    const blogId = req.body.blogId || `temp_${Date.now()}`;
+    
+    // Cloudinary'ye yükle
+    const result = await new Promise((resolve, reject) => {
+      cloudinary.uploader.upload_stream(
+        {
+          folder: `esantiyem/blog/${blogId}`,
+          transformation: [
+            { width: 1200, height: 630, crop: 'fill', gravity: 'auto' },
+            { quality: 'auto' }
+          ],
+          public_id: `cover_${Date.now()}`
+        },
+        (error, result) => {
+          if (error) {
+            console.error('Cloudinary blog cover upload error:', error);
+            reject(error);
+          } else {
+            console.log('Cloudinary blog cover upload success:', result.secure_url);
+            resolve(result);
+          }
+        }
+      ).end(req.file.buffer);
+    });
+
+    res.json({
+      success: true,
+      message: 'Blog kapak görseli başarıyla yüklendi',
+      url: result.secure_url,
+      publicId: result.public_id
+    });
+
+  } catch (error) {
+    console.error('Upload blog cover error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Görsel yüklenirken hata oluştu'
+    });
+  }
+};
+
+// Blog'un tüm dosyalarını silme fonksiyonu
+const deleteBlogFiles = async (blogId) => {
+  try {
+    const blogFolderPath = `esantiyem/blog/${blogId}`;
+    const result = await deleteFolderFromCloudinary(blogFolderPath);
+    console.log(`Blog ${blogId} files deletion result:`, result);
+    return result;
+  } catch (error) {
+    console.error('Delete blog files error:', error);
+    return { success: false, error: error.message };
+  }
+};
+
 // Public ID'den Cloudinary URL'si çıkarma utility fonksiyonu
 const extractPublicIdFromUrl = (url) => {
   try {
@@ -446,9 +510,12 @@ module.exports = {
   uploadProfileImage,
   uploadJobAttachments,
   uploadFile,
+  uploadBlogCover,
   deleteFromCloudinary,
   deleteFolderFromCloudinary,
   deleteUserFiles,
   deleteJobFiles,
-  extractPublicIdFromUrl
+  deleteBlogFiles,
+  extractPublicIdFromUrl,
+  deleteFile
 }; 

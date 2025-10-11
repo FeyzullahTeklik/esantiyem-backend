@@ -1002,34 +1002,25 @@ const getAllJobsForAdmin = async (req, res) => {
 
     if (search) {
       // Arama için tüm ilanları getir
-      const allJobs = await Job.find()
+      const allJobs = await Job.find(filter)
         .populate('categoryId', 'name icon')
         .populate('subcategoryId', 'name')
         .populate('customerId', 'name email profileImage location phone')
         .lean();
 
-      // JavaScript ile filtreleme (kategori adı ve müşteri adı dahil)
-      let filteredJobs = allJobs.filter(job => {
+      // JavaScript ile filtreleme (kategori adı, müşteri adı, ID son 4 hane dahil)
+      const filteredJobs = allJobs.filter(job => {
         const searchLower = search.toLowerCase();
         const categoryName = job.categoryId?.name || '';
         const customerName = job.customerId?.name || job.guestCustomer?.name || '';
+        const jobId = job._id.toString().slice(-4).toLowerCase();
         
         return job.title.toLowerCase().includes(searchLower) ||
                job.description.toLowerCase().includes(searchLower) ||
                categoryName.toLowerCase().includes(searchLower) ||
-               customerName.toLowerCase().includes(searchLower);
+               customerName.toLowerCase().includes(searchLower) ||
+               jobId.includes(searchLower);
       });
-
-      // Diğer filtreleri uygula
-      if (category) {
-        filteredJobs = filteredJobs.filter(job => 
-          job.categoryId?._id.toString() === category
-        );
-      }
-
-      if (status) {
-        filteredJobs = filteredJobs.filter(job => job.status === status);
-      }
 
       // Sıralama
       filteredJobs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());

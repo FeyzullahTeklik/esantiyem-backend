@@ -7,6 +7,7 @@ const {
   uploadProfileImage, 
   uploadJobAttachments,
   uploadFile,
+  uploadBlogCover,
   deleteFromCloudinary,
   extractPublicIdFromUrl
 } = require('../controllers/uploadController');
@@ -19,6 +20,9 @@ router.post('/job-attachments', optionalAuth, uploadJobFiles.array('files', 10),
 
 // Genel dosya yükleme
 router.post('/file', authenticateToken, uploadProfile.single('file'), uploadFile);
+
+// Blog kapak görseli yükleme
+router.post('/blog-cover', authenticateToken, uploadProfile.single('coverImage'), uploadBlogCover);
 
 // Cloudinary dosya silme (profil fotoğrafı için)
 router.delete('/cloudinary-file', authenticateToken, async (req, res) => {
